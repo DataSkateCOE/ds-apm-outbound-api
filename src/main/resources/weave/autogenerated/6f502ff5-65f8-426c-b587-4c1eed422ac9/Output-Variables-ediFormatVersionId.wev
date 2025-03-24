@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_6f502ff5_65f8_426c_b587_4c1eed422ac9_Output_Variables_ediFormatVersionId = Any
+

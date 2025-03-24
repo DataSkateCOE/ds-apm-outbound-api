@@ -1,0 +1,127 @@
+#%RAML 1.0
+title: ds-apm-outbound-api
+version: v1
+
+/outbound:
+  post:
+    description: Endpoint to send outbound messages
+    body:
+      application/json:
+        type: object
+        properties:
+          partnerName:
+            type: string
+            required: true
+          identifiers:
+            type: object
+            required: true
+            properties:
+              Reference-ID:
+                type: string
+                required: true
+              X12-ISA-ZZ:
+                type: string
+                required: true
+              X12-GS:
+                type: string
+                required: true
+          messageFormat:
+            type: string
+            enum: [X12]
+            required: true
+          messageVersion:
+            type: string
+            required: true
+          messageType:
+            type: string
+            required: true
+          documentFlowDirection:
+            type: string
+            enum: [source-at-host]
+            required: true
+          endpointType:
+            type: string
+            enum: [http]
+            required: true
+          serverAddress:
+            type: string
+            required: true
+          resourcePath:
+            type: string
+            required: true
+
+        example:
+                  {
+    "partnerName": "",
+    "identifiers": {
+        "Reference-ID": "refId",
+        "X12-ISA-ZZ": "isa",
+        "X12-GS": "gs",
+    },
+    "messageFormat": "X12",
+    "messageVersion": "v005010",
+    "messageType": "850",
+    "documentFlowDirection": "source-at-host",
+    "endpointType":"http",
+    "serverAddress":"dummyserver.com",
+    "resourcePath": "/api/v1/edi/submit"
+}
+        
+          
+    responses:
+      200:
+        description: Request processed successfully
+        body:
+          application/json:
+            example:
+              {
+                "status": "success",
+                "message": "Message processed successfully",
+                "transactionId": "123456789"
+              }
+      400:
+        description: Bad request, missing or invalid parameters
+        body:
+          application/json:
+            example:
+              {
+                "status": "error",
+                "message": "Invalid input data",
+                "errors": ["partnerName is required", "identifiers.Reference-ID is missing"]
+              }
+      401:
+        description: Unauthorized access
+        body:
+          application/json:
+            example:
+              {
+                "status": "error",
+                "message": "Unauthorized access. Please provide valid credentials."
+              }
+      403:
+        description: Forbidden access
+        body:
+          application/json:
+            example:
+              {
+                "status": "error",
+                "message": "You do not have permission to access this resource."
+              }
+      404:
+        description: Resource not found
+        body:
+          application/json:
+            example:
+              {
+                "status": "error",
+                "message": "Requested resource not found."
+              }
+      500:
+        description: Internal server error
+        body:
+          application/json:
+            example:
+              {
+                "status": "error",
+                "message": "An unexpected error occurred. Please try again later."
+              }

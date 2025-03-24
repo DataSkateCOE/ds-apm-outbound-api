@@ -1,0 +1,584 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	    <http:request-config name="anypoint.mulesoft.com" doc:name="HTTP Request configuration" doc:id="9aca0d59-c951-4738-9707-a87e082c77fb" basePath="#[vars.basepath]">
+        <http:request-connection protocol="HTTPS" host="anypoint.mulesoft.com">
+            <reconnection>
+                <reconnect blocking="false" />
+            </reconnection>
+        </http:request-connection>
+        <expiration-policy maxIdleTime="3" timeUnit="MINUTES" />
+    </http:request-config>
+	
+	<configuration-properties doc:name="Configuration properties" doc:id="58e6a723-e1da-4a3c-b58f-30b4cb24273e" file="local.properties" />
+	<file:config name="File_Config" doc:name="File Config" doc:id="e2e0cebb-11bc-409f-8278-9414658357d7" >
+		<file:connection workingDir="${app.home}" />
+	</file:config>
+	<flow name="implementationFlow" doc:id="543d96c4-ed68-4bf4-ac5d-168445283333" >
+				<flow-ref doc:name="update_messageFlow" doc:id="1a4bbed9-3dd3-4833-b9e0-fcd31153cbc8" name="update_messageFlow" />
+		
+		<set-variable value="#[payload]" doc:name="Set inputRawData Variable" doc:id="f3a0997e-d3fc-4577-aee4-159a295258d1" variableName="inputRawData" />
+		<set-variable value="accounts/api/v2" doc:name="basepath" doc:id="468b9b3b-afb9-4ddd-bc56-928fd1a51093" variableName="basepath" />
+		<http:request method="POST" doc:name="Get accessToken" doc:id="5a26df2c-339e-401e-a826-cccd59ca6468" config-ref="anypoint.mulesoft.com" path="/oauth2/token" target="access_token" targetValue='#[payload."access_token"]' >
+			<http:body ><![CDATA[#[output application/json
+---
+{
+"client_id" : Mule::p('client_id'),
+"client_secret" : Mule::p('client_secret'),
+"grant_type" : "client_credentials"
+}]]]></http:body>
+		</http:request>
+		<logger level="INFO" doc:name="Log accessToken" doc:id="4ff6aac7-937b-4fff-96ee-9048a45eec71" message='#[{"accessToken":vars.access_token&#10; }]' />
+		<set-variable value="partnermanager/partners/api/v1/organizations/{organizationId}/environments/{environmentId}" doc:name="basepath1" doc:id="ebb5d1e1-0a95-460f-9845-b96fbaff2787" variableName="basepath" />
+		<ee:transform doc:name="OrgEndUriParams variable and Authorization_header" doc:id="6d046cc3-26e2-4f7a-9cd3-482a9c2f46ad" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="OrgEndUriParams" ><![CDATA[output application/java
+---
+{
+	"organizationId" : Mule::p('organizationId'),
+	"environmentId":Mule::p('environmentId')
+}]]></ee:set-variable>
+				<ee:set-variable variableName="Authorization_header" ><![CDATA[output application/java
+---
+{
+	"Authorization" : "Bearer $(vars.access_token)"
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<flow-ref doc:name="call create_partner" doc:id="af770815-ad0a-4ff0-9d5b-56a5aed0f97f" name="create_partner" />
+		<logger level="INFO" doc:name="log partner_id" doc:id="692c5a29-98c2-47fe-a151-75d9fb765bd5" message='#["partner created with ID: $(vars.partner_id)"]' />
+		<flow-ref doc:name="create_identifier" doc:id="7b765eaf-133a-47bf-8c3b-a0e31ef3ddf5" name="create_identifier" />
+		<logger level="INFO" doc:name="Log newIdentifiers" doc:id="d84bc70d-1d23-444c-8db7-dbb30e9ec5ee" message='#[{&#10; "newIdentifiers":vars.newPartnerIdentifierIDs&#10;}]' />
+		<flow-ref doc:name="create_messageType" doc:id="62a121c1-3b41-40a9-99ce-a4b96e5a3080" name="create_messageType" />
+		<logger level="INFO" doc:name="Log newMessageID" doc:id="75b6d404-a953-4321-baf3-fc60d1bdf7c1" message="#[{&#10; 'newMessageID':vars.messageID&#10;}]" />
+		<flow-ref doc:name="create_endpoint" doc:id="8594fc58-89b8-4ffa-97c9-ec66ee5fd9fc" name="create_endpoint" />
+		<logger level="INFO" doc:name="Log new_endpoint_ID" doc:id="2b883bf3-2edd-4458-8d11-6c208db272d2" message='#["new_endpoint_ID created with ID- $(vars.new_endpoint_ID)"]' />
+		<flow-ref doc:name="call create_message_flow_with_configuration flow" doc:id="12f6a5cb-e465-421e-a064-72fa61f75f43" name="create_message_flow_with_configuration" />
+		<logger level="INFO" doc:name="Log new_messageFlow_id" doc:id="fe3d06ff-b96a-4b24-bdf9-14659c6d5f56" message='#["new message flow created with name- INBOUND flow- receive-from-$(vars.inputRawData.partnerName)partner, id-$(vars.new_messageFlow_id) "]' />
+		<flow-ref doc:name="update_messageFlow" doc:id="73ab4541-1313-4007-a3f5-04218f453a8e" name="update_messageFlow" />
+		<logger level="INFO" doc:name="Logger" doc:id="e505aed3-7cee-4538-ab5a-b7978750e8e6" message="APM-INBOUND flow created" />
+	</flow>
+	<sub-flow name="create_partner" doc:id="7db5be68-e554-4ab9-91cc-9256f165c188" >
+		<http:request method="GET" doc:name="get all partners" doc:id="5f8be7d3-f2f3-4e87-a939-6fc09878bed3" config-ref="anypoint.mulesoft.com" path="partners" target="all_partners" targetValue="#[payload.*name]" >
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Authorization" : "Bearer $(vars.access_token)"
+}]]]></http:headers>
+			<http:uri-params ><![CDATA[#[output application/java
+---
+{
+	"organizationId" : Mule::p('organizationId'),
+	"environmentId":Mule::p('environmentId')
+}]]]></http:uri-params>
+		</http:request>
+		<logger level="INFO" doc:name="Logger" doc:id="80e2a5fe-440e-4f3d-89ad-8dff4d85c1b5" message="#[output application/json&#10;---&#10;vars.all_partners]" />
+		<choice doc:name="Choice" doc:id="da019abf-03c4-4624-bc31-eadbd22bd565" >
+			<when expression="#[vars.all_partners contains  vars.inputRawData.partnerName]" >
+				<ee:transform doc:name="errorMessage" doc:id="9ade564e-a53b-44d9-971d-221e64ea7548" >
+					<ee:message />
+					<ee:variables >
+						<ee:set-variable variableName="errorMessage" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+  "status": 409,
+  "reasonPhrase": "Conflict",
+  "message": "Partner with this name already exists."
+}]]></ee:set-variable>
+						<ee:set-variable variableName="httpStatus" ><![CDATA[%dw 2.0
+output application/json
+---
+"409"]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="a5510745-9dfc-4aab-b308-12242fa6c039" message="#[vars.errorMessage]" />
+				<raise-error doc:name="APM:PARTNER_EXISTS" doc:id="1fc3651a-d677-4a54-8f88-44e54d8e9562" type="APM:PARTNER_EXISTS" />
+			</when>
+			<otherwise >
+				<http:request method="POST" doc:name="create Partner, store partner_id" doc:id="0db8a38c-c2cd-46f1-81af-17725c66a96a" config-ref="anypoint.mulesoft.com" path="partners" target="partner_id" targetValue='#[payload."id"]' >
+					<http:body ><![CDATA[#[{
+  "name":vars.inputRawData.partnerName,
+  "description": "",
+  "websiteUrl": "",
+  "environmentId": Mule::p('environmentId')
+}]]]></http:body>
+					<http:headers ><![CDATA[#[vars.Authorization_header]]]></http:headers>
+					<http:uri-params ><![CDATA[#[vars.OrgEndUriParams]]]></http:uri-params>
+				</http:request>
+			</otherwise>
+		</choice>
+	</sub-flow>
+	<sub-flow name="create_identifier" doc:id="da911141-dcef-4ef9-a485-1226e395b7c2" >
+		<http:request method="GET" doc:name="get all identifierTypes" doc:id="120a0764-821c-48b0-8c92-da9608d7dde2" config-ref="anypoint.mulesoft.com" path="identifierTypes" target="identifierTypes" >
+			<http:headers ><![CDATA[#[vars.Authorization_header]]]></http:headers>
+			<http:uri-params ><![CDATA[#[vars.OrgEndUriParams]]]></http:uri-params>
+		</http:request>
+		<ee:transform doc:name="identifiers" doc:id="2ab1aff5-1817-4246-9a36-40b5bcb9c2a0" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="identifiers" ><![CDATA[%dw 2.0
+output application/json
+---
+vars.inputRawData.identifiers pluck(($$) : $)]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="515453ab-0a68-4d32-a899-29b1fbaf3cb2" message="#[vars.identifiers]" />
+		<foreach doc:name="For Each" doc:id="ec722de5-14cb-47b4-a97e-8c62097a6c36" collection="#[vars.identifiers]" >
+			<try doc:name="Try" doc:id="39a38ef2-1274-4e06-847c-3ff5d16acc22" >
+				<ee:transform doc:name="newIdentifierObject" doc:id="b5a873c5-7cbb-47dd-85f7-54b8e69bf3f5" >
+					<ee:message />
+					<ee:variables >
+						<ee:set-variable variableName="newIdentifierObject" ><![CDATA[var newIdentifierArray=(keysOf(payload)[0] splitBy "-")
+var indentifierName=((keysOf(payload)[0] splitBy "-")[0 to 1]) joinBy  "-"
+var qualifierCode= if(newIdentifierArray contains "ZZ" ) "ZZ" else if(newIdentifierArray contains "GS") "GS" else "REF_ID"
+var qualifier_id=(((((vars.identifierTypes filter ((item, index) ->item.name ~= indentifierName )).qualifiers)[0]) filter( $.code ~= qualifierCode)).id)[0]
+var identifierTypeId=(((((vars.identifierTypes filter ((item, index) ->item.name ~= indentifierName )).qualifiers)[0]) filter( $.code ~= qualifierCode)).identifierTypeId)[0]
+---
+
+{
+	"indentifierName":indentifierName,
+	"qualifierCode":qualifierCode,
+	"qualifier_id":qualifier_id,
+	"identifierValue":payload[0],
+	"identifierTypeId":identifierTypeId
+}
+
+]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<http:request method="POST" doc:name="create identifier" doc:id="d10693d7-aaa1-4162-a351-4913a6031f51" config-ref="anypoint.mulesoft.com" path="/partners/{partnerId}/identifiers" sendCorrelationId="NEVER" >
+					<http:body ><![CDATA[#[output application/json
+---
+{
+    "identifierTypeQualifierId": vars.newIdentifierObject.qualifier_id,
+    "code": vars.newIdentifierObject.qualifierCode,
+    "value": vars.newIdentifierObject.identifierValue
+}]]]></http:body>
+					<http:headers ><![CDATA[#[vars.Authorization_header]]]></http:headers>
+					<http:uri-params ><![CDATA[#[output application/java
+---
+vars.OrgEndUriParams ++ 
+{
+	"partnerId" : vars.partner_id
+}]]]></http:uri-params>
+				</http:request>
+				<ee:transform doc:name="newPartnerIdentifierIDs varible" doc:id="587d75e0-9846-4c13-9405-1a61395627a4" >
+					<ee:message />
+					<ee:variables >
+						<ee:set-variable variableName="newPartnerIdentifierIDs" ><![CDATA[%dw 2.0
+output application/java
+---
+(vars.newPartnerIdentifierIDs default []) ++ [
+	vars.newIdentifierObject ++ {"newIdentifierId":payload.id}
+]]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="6bf7decc-04f6-4b43-a7f2-543fd81c4cd0" message="#[output application/json&#10;---&#10;vars.newPartnerIdentifierIDs]"/>
+				<error-handler >
+					<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="c7819d69-b5f7-496d-8540-8d63974dffcc" >
+						<logger level="INFO" doc:name="Logger" doc:id="9c867164-186e-4508-93ab-6372b4c657a3" message="#[error.detailedDescription]" />
+						<ee:transform doc:name="Transform Message" doc:id="503fd3a8-0fd8-49d6-bb5f-ee77763cc79a" >
+							<ee:message >
+							</ee:message>
+							<ee:variables >
+								<ee:set-variable variableName="errorMessage" ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"errorMessage":error.errorMessage,
+	"errorDescription": error.detailedDescription
+}]]></ee:set-variable>
+							</ee:variables>
+						</ee:transform>
+					</on-error-propagate>
+				</error-handler>
+			</try>
+		</foreach>
+	</sub-flow>
+	<sub-flow name="create_messageType" doc:id="6f502ff5-65f8-426c-b587-4c1eed422ac9" >
+		<ee:transform doc:name="Transform Message" doc:id="8e496476-5fc1-4f64-9cda-3df631b4928a" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="messageInfo" ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    "messageFormat": vars.inputRawData.messageFormat,
+    "messageVersion":vars.inputRawData.messageVersion,
+    "messageType":vars.inputRawData.messageType,
+    
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="messageFormat" doc:id="b01a1b2a-a915-4e70-b6f1-337c3feb5e9d" message='#["ediFormats/$(vars.inputRawData.messageFormat)/ediFormatVersions"]' />
+		<http:request method="GET" doc:name="get all_ediFormatVersions" doc:id="884e7815-e546-4c98-94cf-5f442d8705ee" config-ref="anypoint.mulesoft.com" path='#["ediFormats/$(vars.inputRawData.messageFormat)/ediFormatVersions"]' responseTimeout="120000" target="all_ediFormatVersions" >
+			<http:headers ><![CDATA[#[vars.Authorization_header]]]></http:headers>
+			<http:uri-params ><![CDATA[#[vars.OrgEndUriParams]]]></http:uri-params>
+		</http:request>
+		<ee:transform doc:name="get ediFormatVersionId" doc:id="a7335902-c88d-40ab-9e83-3d0ffabbf931" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="ediFormatVersionId" ><![CDATA[%dw 2.0
+output application/json
+---
+((vars.all_ediFormatVersions filter($.version ~= vars.inputRawData.messageVersion)).id)[0]]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="ediFormatVersionId" doc:id="a684b0c1-0ee1-431b-b244-940ecb96b360" message='#[{"ediFormatVersionId":vars.ediFormatVersionId}]' />
+		<http:request method="GET" doc:name="get all ediDocumentTypes based on the EDI version like 401" doc:id="d932e15c-d312-4835-9cb0-af86c05eba1f" config-ref="anypoint.mulesoft.com" path='#["ediFormats/$(vars.inputRawData.messageFormat)/ediFormatVersions/$(vars.ediFormatVersionId)/ediDocumentTypes"]' responseTimeout="120000" target="all_ediDocumentTypes" >
+			<http:headers ><![CDATA[#[vars.Authorization_header]]]></http:headers>
+			<http:uri-params ><![CDATA[#[vars.OrgEndUriParams]]]></http:uri-params>
+		</http:request>
+		<ee:transform doc:name="ediDocumentType_id" doc:id="cdc99cc8-858f-42d1-b6a6-5dac726375e4" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="ediDocumentType_id" ><![CDATA[%dw 2.0
+output application/java
+---
+((vars.all_ediDocumentTypes filter($.documentName ~= vars.inputRawData.messageType)).id)[0]]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="ediDocumentType_id1" doc:id="477265df-ad43-4a05-bac4-279442428109" message='#[{"ediDocumentType_id": vars.ediDocumentType_id}]' />
+		<http:request method="GET" doc:name="get existingMessageTypes based on Host id" doc:id="a8db0646-f2a8-4be8-a89e-fa3acdccdc73" config-ref="anypoint.mulesoft.com" path="partners/{partnerId}/documents" responseTimeout="120000" target="existingMessageTypes" >
+			<http:headers ><![CDATA[#[vars.Authorization_header]]]></http:headers>
+			<http:uri-params ><![CDATA[#[output application/java
+---
+vars.OrgEndUriParams ++ 
+{
+	"partnerId" :Mule::p('host_id')
+}]]]></http:uri-params>
+		</http:request>
+		<choice doc:name="Choice" doc:id="d6d028bd-5070-467f-8b93-44d051136d88" >
+			<when expression="#[vars.existingMessageTypes.*ediDocumentTypeId contains vars.ediDocumentType_id]" >
+				<set-variable value="#[output application/json&#10;---&#10;(vars.existingMessageTypes filter( $.ediDocumentTypeId ~= vars.ediDocumentType_id))[0].id]" doc:name="Set messageID Variable" doc:id="b5f1257c-6a8f-485c-bd7e-0950a0e932be" variableName="messageID" />
+			</when>
+			<otherwise >
+				<ee:transform doc:name="input json body  based on documentFlowDirection" doc:id="19f4800f-9a3f-4c69-9978-c385e2b028dd" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    "name": "$(vars.inputRawData.messageFormat)-$(vars.inputRawData.messageVersion)-$(vars.inputRawData.messageType)",
+    "isStandard": true,
+    "ediDocumentTypeId": vars.ediDocumentType_id,
+    "isComplete": true,
+} ++ (
+	if(vars.inputRawData.documentFlowDirection ~= "target-at-host"){
+    "documentTypeRole": "RECEIVE",
+    "documentFlowDirection": "INBOUND"
+    } else {
+    "documentTypeRole": "SEND",
+    "documentFlowDirection": "OUTBOUND"
+    }
+)]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<http:request method="POST" doc:name="create Message Type" doc:id="7f196de3-1086-4731-8830-f189eaa1b305" config-ref="anypoint.mulesoft.com" path="/partners/{partnerId}/documents" responseTimeout="120000" target="messageID" targetValue="#[payload.id]" >
+					<http:headers ><![CDATA[#[vars.Authorization_header]]]></http:headers>
+					<http:uri-params ><![CDATA[#[output application/java
+---
+vars.OrgEndUriParams ++ {
+	"partnerId":Mule::p('host_id')
+}]]]></http:uri-params>
+				</http:request>
+			</otherwise>
+		</choice>
+	</sub-flow>
+	<sub-flow name="create_endpoint" doc:id="e511471f-1a04-49bb-bc17-550897407e3d" >
+		<ee:transform doc:name="form endpoint input" doc:id="4c5c7ece-2f55-4459-9156-85a258be4c57" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+fun endpointTypeId(protocol: String)=protocol match{
+	case "HTTP" -> "aa1fd35b-50af-47fe-91bb-48a7ed4ab685"
+	case "HTTPS" -> "aa1fd35b-50af-47fe-91bb-48a7ed4ab685"
+	else -> "aa1fd35b-50af-47fe-91bb-48a7ed4ab685"
+}
+---
+{
+    "name": "sedntopartner_$(vars.inputRawData.partnerName as String)",
+    "description": "",
+    "environmentId":Mule::p('environmentId'),
+    "endpointTypeId":endpointTypeId(vars.inputRawData.endpointType as String),
+    "partnerId": vars.partner_id as String,
+    "hostCertificateId": null,
+    "partnerCertificateId": null,
+    "endpointRole": "SEND",
+    "supportedFormatTypes": "ALL",
+    "visibility": "EXTERNAL",
+    "endpointType": "http",
+    "config": {
+        "protocol": "HTTP",
+        "path": "/$(vars.inputRawData.resourcePath)",
+        "allowedMethods": "POST",
+        "persistentConnections": false,
+        "connectionIdleTimeout": 30000,
+        "responseTimeout": 15000,
+        "retryInterval": 60,
+        "retryIntervalUnit": "SECONDS",
+        "maxRetryAttempts": 3,
+        "allowStorageApiUIConnection": false,
+        "tlsContext": {
+            "insecure": false,
+            "needCertificate": false,
+            "certificateId": null
+        },
+        "vpc": null,
+        "manageWithApiManager": false,
+        "internalBrowserUrl": "",
+        "configName": "http",
+        "serverAddress": vars.inputRawData.serverAddress,
+        "serverPort": 443,
+        "authMode": {
+            "authType": "NONE",
+            "csmSecret": null
+        }
+    },
+    "isComplete": true,
+    "needsDeployment": false,
+    "partner": {
+        "id":vars.partner_id as String,
+        "name": "partner3",
+        "environmentId": Mule::p('environmentId'),
+        "hostFlag": false,
+        "partnerType": "PARTNER"
+    }
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<http:request method="POST" doc:name="create new_endpoint_ID" doc:id="de956bad-4281-4c52-a621-bfe58201e4ef" config-ref="anypoint.mulesoft.com" path="/endpoints" responseTimeout="120000" target="new_endpoint_ID" >
+			<http:headers ><![CDATA[#[vars.Authorization_header]]]></http:headers>
+			<http:uri-params ><![CDATA[#[vars.OrgEndUriParams]]]></http:uri-params>
+		</http:request>
+	</sub-flow>
+	<sub-flow name="create_message_flow_with_configuration" doc:id="3eee70e0-15fc-41a6-bddc-9345a682d203" >
+		<ee:transform doc:name="create_message_flow_with_configuration input json body" doc:id="60e82fb8-8ec8-48c5-aac0-8e08aa8428f0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"name": "OUTBOUND-SEND-TO-$(vars.inputRawData.partnerName as String)",
+	"direction": if ( vars.inputRawData.documentFlowDirection ~= "target-at-host" ) "INBOUND" else "OUTBOUND",
+	"partnerFromId": Mule::p('host_id'),
+	"partnerToId": vars.partner_id as String,
+	"partnerThirdPartyId": null,
+	"configurations": [{
+		"id": uuid(),
+		"environmentId": Mule::p('environmentId'),
+		"status": "DRAFT",
+		"version": 4,
+		"preProcessingEndpointId": null,
+		"receivingEndpointId": "a58c8429-118c-4dea-ae79-1dbd51d66eb7", //HTTP-B2B-SOURCE-at-HOST-endpoint common for all OUTBOUND flows
+		"receivingAckEndpointId": null,
+		"targetEndpointId": vars.new_endpoint_ID,
+		"sourceDocTypeId": "2bcff45e-caeb-4023-be52-544fc0942afa",  //SourceAtHost-MsgTypeIdentifier common for all OUTBOUND flows 
+		"targetDocTypeId": vars.messageID, 
+		"documentMapping": [],
+		"receivingAckConfig": null,
+		"ediWriteConfigId": null,
+		"partnerIdentifiersConfig": {
+			"useAllHostIdentifiers": false,
+			"useAllPartnerIdentifiers": false,
+			"identifiers": (payload.newPartnerIdentifierIDs map ((item, index) ->{
+				"configId": uuid(),
+				"identifierId": item.newIdentifierId,
+				"identifierTypeId": item.identifierTypeId,
+				"identifierTypeName": item.indentifierName,
+				"identifierCode": item.qualifierCode,
+				"identifierValue": item.identifierValue,
+				"partnerId": vars.partner_id as String,
+				"flowSection": if ( item.indentifierName contains "Reference-ID" ) "RECEIVE" else "SEND"
+			})) ++ [{
+				"configId": uuid(),
+				"identifierId": "0b04c553-332f-4554-b0c8-b11d6097fd40",
+				"identifierTypeId": "ce7e0612-8913-4bac-a99b-7f7c6c8f456f",
+				"identifierTypeName": "X12-ISA",
+				"identifierCode": "ZZ",
+				"identifierValue": "ttoxhostx12zz",
+				"partnerId": Mule::p('host_id'),
+				"flowSection": "SEND"
+			},
+                    {
+				"configId": uuid(),
+				"identifierId": "4e1912b7-a8dd-4d8e-a4ff-8b25a8e7cc59",
+				"identifierTypeId": "ed100353-3187-4535-b400-f6a3fa0b56c3",
+				"identifierTypeName": "X12-GS",
+				"identifierCode": "GS",
+				"identifierValue": "ttoxhostx12gs",
+				"partnerId": Mule::p('host_id'),
+				"flowSection": "SEND"
+			},
+                    {
+				"configId": uuid(),
+				"identifierId": "428310ef-4778-45cc-93d9-f625ae3bab45",
+				"identifierTypeId": "a48a2a06-33be-4399-be1d-1ddb90d0c3fb",
+				"identifierTypeName": "Reference-ID",
+				"identifierCode": "REF_ID",
+				"identifierValue": "ttoxhostrefid",
+				"partnerId": Mule::p('host_id'),
+				"flowSection": "RECEIVE"
+			}]
+		}
+	}],
+	"runtime_deploy_status": "INACTIVE",
+	"runtime_deploy_id": null,
+	"last_deploy_status": null,
+	"last_deploy_message": null
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="8de6f665-4ff1-4194-b24f-acc2ef804343" message="#[payload]" />
+		<http:request method="POST" doc:name="create documentflows" doc:id="efe16fe8-6ef6-4c46-b7dd-5d34485a58fb" config-ref="anypoint.mulesoft.com" path="/documentflows" responseTimeout="120000" target="new_messageFlow_id" targetValue="#[payload.id]" >
+			<http:headers ><![CDATA[#[vars.Authorization_header]]]></http:headers>
+			<http:uri-params ><![CDATA[#[vars.OrgEndUriParams]]]></http:uri-params>
+		</http:request>
+	</sub-flow>
+	
+	
+	 <sub-flow name="update_messageFlow" doc:id="71830973-b77e-4215-9d21-7d13fd3feeab">
+        <flow-ref doc:name="mapping_script" doc:id="c362b7ee-0758-47f4-b7e2-da4e4655e588" name="mapping_script" />
+<!-- [STUDIO:"Try"]		<try doc:name="Try" doc:id="abbba1cf-603b-4821-b706-0ab5b98792dd" >
+			<logger level="INFO" doc:name="Logger" doc:id="c4f38cfd-63d6-444d-91fa-683ef6dfa0ae" message="#[payload&#93;" />
+			<ee:transform doc:name="update_messageFlow_input_body" doc:id="f9baeb01-6e45-4a63-beba-d7e14349625b">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+&#45;&#45;-
+//{
+//	"id": vars.new_messageFlow_id,
+//	"name": "INBOUND flow- receive-from-$(vars.inputRawData.partnerName)partner",
+//	"direction": if ( vars.inputRawData.documentFlowDirection ~= "target-at-host" ) "INBOUND" else "OUTBOUND",
+//	"partnerFromId": vars.partner_id,
+//	"partnerToId": Mule::p('host_id'),
+//	"partnerThirdPartyId": null,
+//	"configurations": [{
+//		"id": "12b68203-f679-4d40-87b9-3166c60ab7ad",
+//		"documentFlowId": vars.new_messageFlow_id,
+//		"environmentId": Mule::p('environmentId'),
+//		"status": "DRAFT",
+//		"version": 0,
+//		"preProcessingEndpointId": null,
+//		"receivingAckEndpointId": null,
+//		"sourceDocTypeId": vars.messageID,
+//		"targetDocTypeId": "7bacb889-e8d8-47d8-9d0a-dd25a2a829bc", /*static- messageTypeID for HOST */
+//		"receivingAckConfig": null,
+//		"ediWriteConfigId": null,
+//		"receivingEndpointId": vars.new_endpoint_ID,
+//		"targetEndpointId": "4bf56dd8-144b-4ebe-ab5a-7e55fad56965", /*static- EndpointID for HOST (test_target_at_host)*/
+//		"documentMapping": [{
+//			"id": "b2621865-10e1-49b1-9d9e-a8db666ftest",
+//			"mappingType": "DWL_FILE",
+//			"mappingContent": "data:application/octet-stream;base64, $(vars.encoded_map_script as String)",
+//			"mappingSourceRef": "test_EDI_toJSON.dsl"
+//		}&#93;,
+//		"partnerIdentifiersConfig": {
+//			"useAllHostIdentifiers": true,
+//			"useAllPartnerIdentifiers": true,
+//			"identifiers": [&#93;
+//		}
+//	}&#93;,
+//	"runtime_deploy_status": "INACTIVE",
+//	"runtime_deploy_id": null,
+//	"last_deploy_status": null,
+//	"last_deploy_message": null
+//}
+
+
+{
+	"id": vars.new_messageFlow_id,
+	"name": "INBOUND flow- receive-from-$(vars.inputRawData.partnerName)partner",
+	"direction": if ( vars.inputRawData.documentFlowDirection ~= "target-at-host" ) "INBOUND" else "OUTBOUND",
+	"partnerFromId": vars.partner_id,
+	"partnerToId": Mule::p('host_id'),
+	"partnerThirdPartyId": null,
+	"configurations": [
+		{
+			"id": uuid(),
+			"documentFlowId": vars.new_messageFlow_id,
+			"environmentId":Mule::p('environmentId'),
+			"status": "DRAFT",
+			"version": 4,
+			"preProcessingEndpointId": null,
+			"receivingEndpointId": vars.new_endpoint_ID,
+			"receivingAckEndpointId": null,
+			"targetEndpointId": "4bf56dd8-144b-4ebe-ab5a-7e55fad56965",
+			"sourceDocTypeId": vars.messageID,
+			"targetDocTypeId": "066e2da9-2d1e-4ea2-b497-52ab74c312de",
+			"documentMapping": [
+				{
+					"id": "8bc5fbc0-a3b5-4f55-9144-d02dad18be8f",
+					"mappingType": "DWL_FILE",
+					"mappingContent": null,
+					"mappingSourceRef": "test_EDI_toJSON.dsl",
+					"isComplete": false
+				}
+			&#93;,
+			"receivingAckConfig": null,
+			"ediWriteConfigId": null,
+			"partnerIdentifiersConfig": {
+				"useAllHostIdentifiers": true,
+				"useAllPartnerIdentifiers": true,
+				"identifiers": [&#93;
+			}
+		}
+	&#93;,
+	"runtime_deploy_status": "INACTIVE",
+	"runtime_deploy_id": null,
+	"last_deploy_status": null,
+	"last_deploy_message": null
+}&#93;&#93;></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+			<logger level="INFO" doc:name="Logger" doc:id="f8dd317b-4193-4046-a495-3405ebf6511a" message="#[output application/json&#10;&#45;&#45;-&#10;payload&#93;" />
+			<http:request method="PATCH" doc:name="update documentflow by ID" doc:id="a68799a1-8a8b-4344-8fa1-343f8ea8b005" config-ref="anypoint.mulesoft.com" path="documentflows/{documentflowId}">
+            <http:headers><![CDATA[#[vars.Authorization_header&#93;&#93;&#93;></http:headers>
+            <http:uri-params><![CDATA[#[output application/json
+&#45;&#45;-
+vars.OrgEndUriParams ++ {"documentflowId":vars.new_messageFlow_id}&#93;&#93;&#93;></http:uri-params>
+        </http:request>
+			<logger level="INFO" doc:name="Logger" doc:id="68a9fc2e-29fd-4498-9093-2f67178a9586" message="#[output application/json&#10;&#45;&#45;-&#10;payload&#93;" />
+		</try> [STUDIO] -->
+		<logger level="INFO" doc:name="Logger" doc:id="3a18b942-3374-4ee6-bcb3-4bca2e1f277e" message="#[&quot;messageType, partner, identifiers, endpoints added to the message flow with id- $(vars.new_messageFlow_id)&quot;]" />
+        <http:request method="POST" doc:name="add mapping file to message flow" doc:id="df951797-f963-4849-bf7e-1edd18f73b6c" config-ref="anypoint.mulesoft.com" path="documentflows/{documentflowId}/mappings">
+            <http:body><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+
+  "mappingType": "DWL_FILE",
+"mappingContent": "data:application/octet-stream;base64, $(vars.encoded_map_script as String)",
+  "mappingSourceRef": "test_EDI_toJSON.dsl"
+}]]]></http:body>
+            <http:headers><![CDATA[#[vars.Authorization_header]]]></http:headers>
+            <http:uri-params><![CDATA[#[output application/json
+---
+vars.OrgEndUriParams ++ {"documentflowId":vars.new_messageFlow_id}]]]></http:uri-params>
+        </http:request>
+        <logger level="INFO" doc:name="Logger" doc:id="f89cdc39-3fee-4eae-90ef-6e1011c69f44" message="#[&quot;added mapping file to the message flow with id- $(vars.new_messageFlow_id)&quot;]" />
+    </sub-flow>
+     <sub-flow name="mapping_script" doc:id="456ba38c-29ac-49f9-abf5-13fde35b80db">
+        <file:read doc:name="Read" doc:id="5ac7b734-60e4-4487-b08c-03abfcec9a12" config-ref="File_Config" path="PO_ACK_json_to_855_EDI.dwl"/>
+		<ee:transform doc:name="convert dw data into base64 encoded format" doc:id="8268ca2f-c059-4970-8f40-90fc79f19b17">
+            <ee:message />
+            <ee:variables>
+                <ee:set-variable variableName="encoded_map_script"><![CDATA[%dw 2.0
+import * from dw::core::Binaries
+output application/json
+var dwScript= read(payload, "application/octet-stream")
+---
+toBase64(dwScript as Binary)]]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" doc:id="7c9a43d0-85d3-46f1-8851-2a289bc135bd" message="#[&quot;mapping file converted to base64 encoded format&quot;]" />
+    </sub-flow>
+</mule>
